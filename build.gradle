@@ -1,0 +1,142 @@
+plugins {
+    id 'java'
+    id 'application'
+    // Cobertura de código (genera el reporte XML/HTML que lee SonarQube)
+    id 'jacoco'
+    // Plugin oficial de SonarSource para enviar el análisis a SonarQube/SonarCloud
+    id 'org.sonarqube' version '7.3.0.8198'
+}
+
+group = 'com.facturacion'
+// La versión se puede sobreescribir desde la línea de comandos o desde el CI:
+//   ./gradlew build -PversionApp=1.2.0
+version = project.findProperty('versionApp') ?: '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+// El código fuente tiene tildes y eñes: forzamos UTF-8 para que compile igual
+// en Windows, Linux y en el servidor de integración continua.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // JUnit 5 (Jupiter) para pruebas unitarias
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    // Necesario desde Gradle 9 (y recomendado desde Gradle 8.x) para ejecutar JUnit 5
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Soporte para pruebas parametrizadas (@ParameterizedTest, @CsvSource, etc.)
+    testImplementation 'org.junit.jupiter:junit-jupiter-params'
+
+    // Mockito para crear dobles de prueba (mocks) de las interfaces
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
+
+    // Karate: pruebas de aceptación escritas en lenguaje Gherkin (archivos .feature)
+    testImplementation 'com.intuit.karate:karate-junit5:1.4.1'
+}
+
+application {
+    // Clase principal que contiene el método main
+    mainClass = 'com.facturacion.app.AplicacionPrincipal'
+}
+
+// ---------------------------------------------------------------------------
+// PRUEBAS
+// ---------------------------------------------------------------------------
+
+// 1) Pruebas unitarias: todo lo que NO esté etiquetado como "aceptacion".
+test {
+    useJUnitPlatform {
+        excludeTags 'aceptacion'
+    }
+}
+
+// 2) Pruebas de aceptación (Karate): se ejecutan en una tarea aparte para que el
+//    pipeline las muestre como una etapa distinta de las pruebas unitarias.
+tasks.register('pruebasAceptacion', Test) {
+    description = 'Ejecuta las pruebas de aceptación escritas con Karate.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'aceptacion'
+    }
+    shouldRunAfter tasks.named('test')
+}
+
+// "gradle check" (y por tanto "gradle build") ejecuta ambos tipos de prueba
+// y, al final, genera el reporte de cobertura.
+tasks.named('check') {
+    dependsOn tasks.named('pruebasAceptacion')
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+// ---------------------------------------------------------------------------
+// COBERTURA (JaCoCo)
+// ---------------------------------------------------------------------------
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+jacocoTestReport {
+    dependsOn tasks.named('test'), tasks.named('pruebasAceptacion')
+    // Une la cobertura de las pruebas unitarias y de las de aceptación
+    executionData.from(fileTree(layout.buildDirectory.dir('jacoco')) { include '*.exec' })
+    reports {
+        xml.required = true   // lo consume SonarQube
+        html.required = true  // para revisar a mano: build/reports/jacoco/test/html/index.html
+        csv.required = false
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SONARQUBE
+// ---------------------------------------------------------------------------
+// El token y la URL del servidor NO se escriben aquí (son secretos/entorno):
+//   - SONAR_TOKEN     -> token de usuario generado en SonarQube
+//   - SONAR_HOST_URL  -> p. ej. http://localhost:9000 o https://sonarcloud.io
+sonar {
+    properties {
+        property 'sonar.projectKey', 'facturacion-descuentos'
+        property 'sonar.projectName', 'Sistema de Facturacion con Descuentos'
+        property 'sonar.projectVersion', project.version.toString()
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile.path
+        // Espera el resultado del Quality Gate: si no se cumple, el comando falla
+        // y el pipeline se pone en rojo.
+        property 'sonar.qualitygate.wait', 'true'
+    }
+}
+
+// El análisis necesita que ya existan los reportes de pruebas y cobertura.
+tasks.named('sonar') {
+    dependsOn tasks.named('check')
+}
+
+// ---------------------------------------------------------------------------
+// ARTEFACTO (JAR EJECUTABLE)
+// ---------------------------------------------------------------------------
+// El proyecto no tiene dependencias en tiempo de ejecución, así que basta con
+// declarar la clase principal en el manifiesto para obtener un jar ejecutable:
+//   java -jar build/libs/facturacion-descuentos-1.0.0.jar
+jar {
+    archiveBaseName = 'facturacion-descuentos'
+    manifest {
+        attributes(
+                'Main-Class'            : 'com.facturacion.app.AplicacionPrincipal',
+                'Implementation-Title'  : 'Sistema de Facturacion con Descuentos',
+                'Implementation-Version': project.version
+        )
+    }
+}

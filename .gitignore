@@ -1,0 +1,24 @@
+# Salida de compilación y reportes (se regeneran en cada build)
+build/
+.gradle/
+out/
+bin/
+*.class
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Secretos: nunca subir tokens ni contraseñas
+.env
+*.token
+
+# OJO: el wrapper de Gradle SÍ se sube al repositorio (gradlew, gradlew.bat y gradle/wrapper/*)

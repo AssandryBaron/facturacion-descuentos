@@ -1,0 +1,31 @@
+# SonarQube local para el laboratorio.
+#
+#   docker compose up -d        # levantar (tarda ~1-2 minutos en estar listo)
+#   docker compose logs -f      # ver el arranque
+#   docker compose down         # apagar (los datos se conservan en los volúmenes)
+#
+# Interfaz web: http://localhost:9000   (usuario y clave iniciales: admin / admin,
+# SonarQube pide cambiar la clave en el primer ingreso)
+#
+# NOTA: esta configuración usa la base de datos embebida (H2), válida solo para
+# pruebas y laboratorios. En producción se usa PostgreSQL.
+#
+# En Linux, SonarQube exige: sudo sysctl -w vm.max_map_count=524288
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      # Evita que Elasticsearch aborte el arranque por requisitos del sistema en equipos de desarrollo
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

@@ -1,0 +1,75 @@
+name: Integración continua
+
+# Desarrollo basado en trunk (trunk-based development):
+#  - La rama "main" es el trunk y siempre debe estar en verde.
+#  - Los cambios llegan en incrementos pequeños, desde ramas de vida corta, mediante pull request.
+#  - Cada push a main y cada pull request ejecutan este pipeline completo.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Si llega un commit nuevo a la misma rama, cancela la ejecución anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  construir-probar-analizar:
+    name: Construir, probar y analizar
+    runs-on: ubuntu-latest
+    env:
+      # Secretos configurados en Settings > Secrets and variables > Actions
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+        with:
+          # SonarQube necesita el historial completo para calcular "código nuevo" y autoría
+          fetch-depth: 0
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar Gradle (con caché de dependencias)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Dar permiso de ejecución al wrapper
+        run: chmod +x gradlew
+
+      - name: Compilar y ejecutar pruebas unitarias, de aceptación y cobertura
+        run: ./gradlew build --no-daemon
+
+      - name: Análisis estático en SonarQube (espera el Quality Gate)
+        # Solo se ejecuta si el secreto existe (los PR desde forks no tienen acceso a secretos)
+        if: ${{ env.SONAR_TOKEN != '' }}
+        run: ./gradlew sonar --no-daemon
+
+      - name: Guardar el artefacto (jar ejecutable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: facturacion-descuentos-jar-${{ github.run_number }}
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+      - name: Guardar reportes de pruebas y cobertura
+        # always(): también se suben cuando algo falló, para poder revisarlo
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-${{ github.run_number }}
+          path: |
+            build/reports/tests/
+            build/reports/jacoco/
+            build/karate-reports/
+          if-no-files-found: ignore
