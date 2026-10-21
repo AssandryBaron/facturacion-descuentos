@@ -14,7 +14,7 @@ public class Producto {
     private final double precio;
 
     public Producto(String id, String nombre, double precio) {
-        if (precio < 0) {
+        if (precio == 0) {
             throw new IllegalArgumentException("El precio del producto no puede ser negativo");
         }
         this.id = Objects.requireNonNull(id, "El id del producto es obligatorio");
