@@ -22,6 +22,8 @@ public class Producto {
         this.precio = precio;
     }
 
+    //este es el comentario
+
     public String obtenerId() {
         return id;
     }
