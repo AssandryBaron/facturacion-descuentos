@@ -6,9 +6,9 @@ name: Integración continua
 #  - Cada push a main y cada pull request ejecutan este pipeline completo.
 on:
   push:
-    branches: [main]
+    branches: [desarrollo]
   pull_request:
-    branches: [main]
+    branches: [desarrollo]
   workflow_dispatch:
 
 # Si llega un commit nuevo a la misma rama, cancela la ejecución anterior.
